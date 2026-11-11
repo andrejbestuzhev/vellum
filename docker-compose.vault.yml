@@ -1,0 +1,55 @@
+# Production on the shared infra: vault-mcp only. Typesense is the shared
+# one, reached over the external `db` network; Traefik serves HTTPS over
+# `traefik_public`. The collection is vault_sections — nothing else on the
+# instance is touched.
+#   cp .env.prod.example .env   # and fill it in
+#   docker compose -f docker-compose.vault.yml up -d --build
+# See docs/deploy.md.
+name: vault-mcp
+
+networks:
+  traefik_public:
+    external: true
+  db:
+    external: true
+
+services:
+  vault-mcp:
+    build:
+      context: .
+      args:
+        VERSION: ${VAULT_MCP_VERSION:-dev}
+    image: vault-mcp:${VAULT_MCP_VERSION:-dev}
+    container_name: vault-mcp
+    restart: unless-stopped
+    env_file:
+      - path: .env
+        required: true
+    environment:
+      PORT: "8080"
+      VELLUM_VAULT_PATH: /vault
+      VELLUM_INIT_STRUCTURE: "false"
+      AUTH_ENABLED: "true"
+      TRUST_PROXY: "1"
+      VAULT_SEARCH: typesense
+      TYPESENSE_URL: ${TYPESENSE_URL:-http://typesense:8108}
+    volumes:
+      - ./vault:/vault
+    networks:
+      - traefik_public
+      - db
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.vault-mcp.rule=Host(`${VAULT_MCP_HOST:?set VAULT_MCP_HOST in .env}`)
+      - traefik.http.routers.vault-mcp.entrypoints=websecure
+      - traefik.http.routers.vault-mcp.tls.certresolver=le
+      - traefik.http.services.vault-mcp.loadbalancer.server.port=8080
+      - traefik.docker.network=traefik_public
+    # The binary only writes into the mounted vault.
+    read_only: true
+    security_opt:
+      - no-new-privileges
+    deploy:
+      resources:
+        limits:
+          memory: 256M
