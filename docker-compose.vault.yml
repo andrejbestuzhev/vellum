@@ -19,7 +19,9 @@ services:
       context: .
       args:
         VERSION: ${VAULT_MCP_VERSION:-dev}
-    image: vault-mcp:${VAULT_MCP_VERSION:-dev}
+    # One tag: a rebuild leaves the previous image dangling, so a prune
+    # removes it. The version (a commit on deploy) goes into the binary.
+    image: vault-mcp:latest
     container_name: vault-mcp
     restart: unless-stopped
     env_file:

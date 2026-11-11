@@ -1,0 +1,61 @@
+name: vault-deploy
+
+# The vault build goes to production on every push to the vault branch:
+# tests here, then the server checks the commit out and rebuilds
+# (scripts/vault-deploy.sh). No tags involved. docs/deploy.md has the setup.
+on:
+  push:
+    branches: [vault]
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: Commit or branch to deploy
+        required: true
+        default: vault
+
+concurrency:
+  group: vault-deploy-production
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref || github.sha }}
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.26"
+      - run: go vet ./...
+      - run: go test ./...
+
+  deploy:
+    needs: test
+    runs-on: ubuntu-latest
+    # The image (SPA + binary) is built on the server: a few minutes.
+    timeout-minutes: 30
+    steps:
+      - name: Deploy on the server
+        uses: appleboy/ssh-action@v1
+        env:
+          REF: ${{ inputs.ref || github.sha }}
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          # Host key fingerprint: no match, no connection.
+          fingerprint: ${{ secrets.SSH_FINGERPRINT }}
+          envs: REF
+          command_timeout: 30m
+          script: |
+            set -euo pipefail
+            cd /opt/apps/vault-mcp
+            git fetch origin --prune --force
+            # A branch name deploys its tip on origin, a SHA itself.
+            if git rev-parse --verify --quiet "origin/$REF" >/dev/null; then REF="origin/$REF"; fi
+            git checkout --force --detach "$REF"
+            ./scripts/vault-deploy.sh "$(git rev-parse --short HEAD)"
