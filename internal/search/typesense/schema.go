@@ -68,6 +68,9 @@ func (s *Store) Ensure(ctx context.Context) (created bool, err error) {
 	cctx, cancel = context.WithTimeout(ctx, createTimeout)
 	defer cancel()
 	if _, err := s.client.Collections().Create(cctx, sc); err != nil {
+		if hasStatus(err, http.StatusConflict) { // created meanwhile, e.g. by an earlier start
+			return false, nil
+		}
 		return false, err
 	}
 	return true, nil
@@ -85,7 +88,9 @@ func (s *Store) Drop(ctx context.Context) error {
 	return nil
 }
 
-func isNotFound(err error) bool {
+func isNotFound(err error) bool { return hasStatus(err, http.StatusNotFound) }
+
+func hasStatus(err error, status int) bool {
 	var he *ts.HTTPError
-	return errors.As(err, &he) && he.Status == http.StatusNotFound
+	return errors.As(err, &he) && he.Status == status
 }

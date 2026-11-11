@@ -63,10 +63,10 @@ func (x *Searcher) Search(query string, opts vault.SearchOpts) ([]vault.Result, 
 }
 
 // sectionLine finds the file line of a hit's section heading, so the web
-// UI can jump to it; 1 for the preamble or a note that changed meanwhile.
+// UI can jump to it; 1 when the note changed meanwhile.
 func (x *Searcher) sectionLine(path, heading string) int {
 	n, err := x.store.vault.Read(path)
-	if err != nil || heading == "" {
+	if err != nil {
 		return 1
 	}
 	for _, sec := range SplitSections(n.Content, n.Body) {
