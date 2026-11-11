@@ -31,6 +31,11 @@ type Deps struct {
 	ShareTools bool
 	// WebsiteURL is the server's public URL, advertised in the MCP server info.
 	WebsiteURL string
+	// Extend, when set, runs last in New: a build on top of vellum adds its
+	// own tools there (or removes built-in ones) without editing this file.
+	Extend func(s *mcp.Server, d Deps)
+	// ExtraInstructions is appended to the server instructions.
+	ExtraInstructions string
 }
 
 // New builds the MCP server with all vellum tools registered.
@@ -61,6 +66,9 @@ func New(d Deps) *mcp.Server {
 	}
 	registerResources(server, d)
 	followOutsideMoves(d)
+	if d.Extend != nil {
+		d.Extend(server, d)
+	}
 	return server
 }
 
@@ -91,7 +99,7 @@ func instructions(d Deps) string {
 			s += "\n\nThis vault: " + desc
 		}
 	}
-	return s
+	return s + d.ExtraInstructions
 }
 
 // folderContextInstruction is the one sentence that teaches the folder
