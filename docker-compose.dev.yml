@@ -1,9 +1,65 @@
-# Local development overlay: build the image from the working tree.
-#   docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d --build
+# Local development of the vault build: vault-mcp with its own Typesense,
+# no Traefik, no OAuth, ports on localhost only. One command:
+#   docker compose -f docker-compose.dev.yml up -d --build
+# Settings come from .env.dev when it exists (cp .env.dev.example .env.dev);
+# the defaults below work without it. See docs/dev.md.
+name: vault-dev
+
 services:
-  vellum:
+  typesense:
+    image: typesense/typesense:30.2
+    restart: unless-stopped
+    environment:
+      TYPESENSE_API_KEY: ${TYPESENSE_API_KEY:-vault-dev-key}
+      TYPESENSE_DATA_DIR: /data
+    ports:
+      - "127.0.0.1:${TYPESENSE_PORT:-8108}:8108"
+    volumes:
+      # Keeps the downloaded embedding model and the index between restarts.
+      - typesense_data:/data
+    healthcheck:
+      # /dev/tcp is a bash feature; the image's /bin/sh (dash) lacks it.
+      test: ["CMD", "bash", "-c", "exec 3<>/dev/tcp/localhost/8108"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  # Docker creates a missing ./vault owned by root; hand it to the user the
+  # server runs as (your uid by default), so you can edit notes in it too.
+  vault-init:
+    image: alpine:3.20
+    command: ["chown", "${VAULT_UID:-1000}:${VAULT_GID:-1000}", "/vault"]
+    volumes:
+      - ./vault:/vault
+
+  vault-mcp:
     build:
       context: .
       args:
         VERSION: dev
-    image: vellum:dev
+    image: vault-mcp:dev
+    restart: unless-stopped
+    user: "${VAULT_UID:-1000}:${VAULT_GID:-1000}"
+    depends_on:
+      vault-init:
+        condition: service_completed_successfully
+      typesense:
+        condition: service_healthy
+    env_file:
+      - path: .env.dev
+        required: false
+    environment:
+      VELLUM_VAULT_PATH: /vault
+      VELLUM_INIT_STRUCTURE: "false"
+      AUTH_ENABLED: "false"
+      VAULT_SEARCH: typesense
+      TYPESENSE_URL: http://typesense:8108
+      TYPESENSE_API_KEY: ${TYPESENSE_API_KEY:-vault-dev-key}
+    ports:
+      - "127.0.0.1:${VAULT_MCP_PORT:-8080}:8080"
+    volumes:
+      - ./vault:/vault
+      - ./testdata:/testdata:ro
+
+volumes:
+  typesense_data:
