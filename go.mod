@@ -4,11 +4,18 @@ go 1.25.0
 
 require (
 	github.com/getsentry/sentry-go v0.47.0
+	github.com/typesense/typesense-go/v3 v3.2.0
 	golang.org/x/text v0.39.0
 	gopkg.in/yaml.v3 v3.0.1
 )
 
-require github.com/kr/text v0.2.0 // indirect
+require (
+	github.com/apapsch/go-jsonmerge/v2 v2.0.0 // indirect
+	github.com/google/uuid v1.6.0 // indirect
+	github.com/kr/text v0.2.0 // indirect
+	github.com/oapi-codegen/runtime v1.1.1 // indirect
+	github.com/sony/gobreaker v1.0.0 // indirect
+)
 
 require (
 	github.com/google/jsonschema-go v0.4.3 // indirect
