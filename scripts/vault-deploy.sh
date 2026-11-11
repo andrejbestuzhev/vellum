@@ -12,7 +12,7 @@ export COMPOSE_FILE=docker-compose.vault.yml
 VAULT_MCP_VERSION="$(git rev-parse --short HEAD)"
 export VAULT_MCP_VERSION
 SERVICE=vault-mcp
-STATE_FILE=.deployed-ref
+STATE_FILE=.git/vault-deployed-ref  # inside .git: never shows as a change
 
 PREV_REF=""
 if [[ -f "$STATE_FILE" ]]; then
