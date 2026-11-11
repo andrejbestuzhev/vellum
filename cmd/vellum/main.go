@@ -35,6 +35,9 @@ var version = "dev"
 func main() {
 	// Nothing but -version may write to stdout: in stdio mode it carries
 	// JSON-RPC only, so every message, even a startup error, goes to stderr.
+	if code, ok := vaultCommand(os.Args[1:]); ok {
+		os.Exit(code)
+	}
 	opts, err := parseArgs(os.Args[1:], os.Stderr)
 	if errors.Is(err, flag.ErrHelp) {
 		return
@@ -129,6 +132,7 @@ func main() {
 	} else if cfg.Ranker == vault.RankerLegacy {
 		logger.Info("search uses the legacy ranker (VELLUM_RANKER=legacy)")
 	}
+	vx := setupVault(v, index, searcher, cfg.InboxDir, logger)
 
 	// Public share links (VELLUM_SHARING, off by default). The store is
 	// opened even for the stdio path: a link must keep pointing at its note
@@ -151,7 +155,7 @@ func main() {
 	mcpSrv := mcpserver.New(mcpserver.Deps{
 		Vault:    v,
 		Index:    index,
-		Searcher: searcher,
+		Searcher: vx.Searcher,
 		Structure: vault.Structure{
 			Inbox:    cfg.InboxDir,
 			Projects: cfg.ProjectsDir,
@@ -162,6 +166,9 @@ func main() {
 		WebsiteURL: cfg.IssuerURL,
 		Shares:     shares,
 		ShareTools: cfg.ShareTools(),
+
+		Extend:            vx.Extend,
+		ExtraInstructions: vx.Instructions,
 	})
 
 	if opts.stdio {
@@ -214,7 +221,7 @@ func main() {
 	api := &httpapi.API{
 		Vault:     v,
 		Index:     index,
-		Searcher:  searcher,
+		Searcher:  vx.Searcher,
 		Structure: structure,
 		Activity:  recorder,
 		Endpoint:  strings.TrimRight(cfg.IssuerURL, "/") + "/mcp",
