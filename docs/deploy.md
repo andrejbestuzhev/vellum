@@ -37,17 +37,39 @@ other collection.
 ```sh
 git clone -b vault <fork url> /opt/apps/vault-mcp
 cd /opt/apps/vault-mcp
-cp .env.prod.example .env        # fill in host, secret, Typesense key
+cp .env.prod.example .env && chmod 600 .env   # fill in host, secret, Typesense key
 mkdir -p vault && sudo chown 65532:65532 vault   # the image runs as uid 65532
-docker compose -f docker-compose.vault.yml up -d --build
-docker compose -f docker-compose.vault.yml logs -f
+git checkout --detach && ./scripts/vault-deploy.sh "$(git rev-parse --short HEAD)"
 ```
 
-The log shows `typesense collection created` (or that it exists) and then
-`typesense index in step with the vault`. `https://<host>/healthz` answers
-as soon as the server listens.
+The log (`docker compose -f docker-compose.vault.yml logs -f`) shows
+`typesense collection created` (or that it exists) and then `typesense
+index in step with the vault`. `https://<host>/healthz` answers as soon as
+the server listens and reports the deployed commit as its version.
 
-Updating: `git pull && docker compose -f docker-compose.vault.yml up -d --build`.
+## Continuous deployment
+
+Every push to the `vault` branch deploys it
+(`.github/workflows/vault-deploy.yml`): `go vet` and the tests run first,
+then the workflow connects over SSH, checks the pushed commit out in
+`/opt/apps/vault-mcp` and runs `scripts/vault-deploy.sh` there (build, up,
+health check, prune). Pushes queue: one deploy runs at a time. To deploy a
+commit again, re-run its run (Actions → vault-deploy → Re-run jobs); there
+is no manual trigger, as GitHub offers one only for workflows on the
+default branch, and the fork's default branch mirrors upstream.
+
+Repository secrets (Settings → Secrets and variables → Actions):
+
+| Secret | Value |
+|---|---|
+| `SSH_HOST` | the server |
+| `SSH_USER` | the deploy user; it needs docker and write access to `/opt/apps/vault-mcp` |
+| `SSH_PRIVATE_KEY` | a private key whose public half is in that user's `authorized_keys` |
+| `SSH_FINGERPRINT` | SHA256 fingerprint of the host key the client will pick: with both ECDSA and ED25519 keys on the server that is ECDSA, `ssh-keygen -lf /etc/ssh/ssh_host_ecdsa_key.pub -E sha256` |
+
+By hand on the server:
+`cd /opt/apps/vault-mcp && git fetch && git checkout --force --detach origin/vault && ./scripts/vault-deploy.sh "$(git rev-parse --short HEAD)"`.
+A failed deploy prints the command that rolls back to the previous one.
 At start the server indexes what changed while it was down.
 
 ## Reindex
